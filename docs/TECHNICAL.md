@@ -181,7 +181,7 @@ gym-log/
 
 | 資料表 | 說明 | 主要欄位 |
 |---|---|---|
-| `categories` | 動作類別（每人自訂） | `name`、`sort_order` |
+| `categories` | 動作類別 | `name`、`sort_order`、`code`（預設類別的代碼，自訂類別是 null） |
 | `exercises` | 動作 | `name`、`category_id`（null = 未分類）、`note`、`sort_order` |
 | `templates` | 課表範本 | `name`、`note`、`sort_order` |
 | `template_items` | 範本中的動作 | `template_id`、`exercise_id`、`sort_order`、`target_sets`、`target_reps`、`target_weight` |
@@ -199,7 +199,18 @@ gym-log/
 | `server_updated_at` | 伺服器收到資料的時間，同步時用它當「上次拉到哪裡」的游標 |
 | `_dirty` | **只存在本機**：1 = 還沒上傳 |
 
-**類別**：每個人有自己的類別清單，第一次使用時建立預設的 7 個（胸、背、腿、肩、手臂、核心、其他）。刪除類別時，底下動作的 `category_id` 會改成 null，顯示為「未分類」。
+**類別**：每個人有自己的類別清單，分成兩種：
+
+| | 預設類別 | 自訂類別 |
+|---|---|---|
+| 項目 | 胸、背、腿、肩、手臂、核心、其他 | 使用者自己新增的 |
+| `code` | `chest`、`back`、`legs`、`shoulders`、`arms`、`core`、`other` | `null` |
+| 排序 | 可以 | 可以 |
+| 改名、刪除 | **不行** | 可以 |
+
+- 每次同步完都會檢查，缺少的預設類別會自動補上（新使用者第一次登入時會全部建立）。
+- 預設類別的鎖定有兩層：前端 `categories.ts` 會擋，資料庫的 `protect_default_category` trigger 也會把改名、刪除還原，`(user_id, code)` 的唯一索引則防止重複建立。
+- 刪除自訂類別時，底下動作的 `category_id` 會改成 null，顯示為「未分類」。
 
 > `exercises.category` 是舊版的固定部位欄位（`chest`、`back`…），`0002_categories.sql` 已經把資料搬到 `category_id`。這個欄位保留只是為了讓舊版 App 同步不會失敗，程式已經不再使用。
 
@@ -253,7 +264,7 @@ gym-log/
 1. **推送**：依序處理 `categories → exercises → templates → template_items → workouts → workout_sets`（被參照的表先推，外鍵才不會失敗）。把 `_dirty = 1` 的資料 upsert 上去，每批最多 1000 筆。
 2. **清除標記**：只清除「上傳後沒有再被修改」的資料的 `_dirty`，避免同步途中的修改被漏掉。
 3. **拉取**：每張表查詢 `server_updated_at > 上次游標` 的資料，寫回本機。如果本機有**更新的**未同步修改，保留本機版本。
-4. **初始化**：第一次使用時，建立 7 個預設類別和 23 個預設動作。類別只有在本機和雲端都完全沒有（包括已刪除的）時才會建立，所以刪光類別也不會被自動補回來。
+4. **初始化**：補上缺少的預設類別；第一次使用時，再建立 23 個預設動作。如果雲端還沒執行 `0003_default_categories.sql`（拉下來的類別沒有 `code` 欄位），就先不補，避免建立重複的類別。
 
 同一時間只會跑一個同步，重複呼叫會共用同一個 Promise。
 
@@ -372,7 +383,9 @@ gym-log/
 ### 開發注意事項
 - 新增資料表時，要同時修改：`supabase/migrations/` 的 SQL、`src/db/types.ts` 的型別和 `SYNC_TABLES`、`src/db/local.ts` 的 Dexie schema（要**升版本號** `db.version(n)`）。
 - 資料庫變更要新增一個編號更大的 SQL 檔（例如 `0003_xxx.sql`），不要修改已經執行過的檔案。部署時要**先執行 SQL，再更新前端**。
-- 本機資料庫目前是第 2 版：v2 新增 `categories`，並清除 `exercises` 的同步游標，讓動作重新從雲端拉一次，取得 `category_id`。
+- 本機資料庫目前是第 3 版：
+  - v2：新增 `categories`，並清除 `exercises` 的同步游標，讓動作重新從雲端拉一次，取得 `category_id`
+  - v3：清除 `categories` 的同步游標，重新拉一次以取得 `code`
 - 查詢時記得用 `alive` 過濾掉已刪除的資料。
 - 寫入一律透過 `insertRow` / `updateRow` / `deleteRow`，不要直接呼叫 Dexie 的 `add` / `put`，不然不會被同步。
 - 會被資料更新影響的輸入框，請用 `LazyInput`，不要用 `:value` + `@change`。

@@ -74,17 +74,27 @@ export function syncAll(): Promise<void> {
   return running
 }
 
-/** 第一次使用時，建立預設類別與動作（本機與雲端都沒有時才建立） */
-async function seedIfEmpty() {
-  let changed = false
+/** 補上缺少的預設類別（新使用者第一次使用時會全部建立） */
+async function ensureDefaultCategories() {
+  const all = await db.categories.toArray()
+  // 雲端還沒執行 0003_default_categories.sql（拉下來的資料沒有 code 欄位）→ 先不處理，避免建立重複的類別
+  if (all.length && all.every((c) => c.code === undefined)) return false
 
-  // 類別：連已刪除的都沒有，才建立預設值
-  if ((await db.categories.count()) === 0) {
-    for (const [i, name] of DEFAULT_CATEGORIES.entries()) {
-      await insertRow('categories', { name, sort_order: i })
-    }
-    changed = true
+  const have = new Set(all.map((c) => c.code).filter(Boolean))
+  const missing = DEFAULT_CATEGORIES.filter(([code]) => !have.has(code))
+  if (!missing.length) return false
+
+  // 全部都沒有（新使用者）→ 照預設順序；只缺幾個 → 排在最後
+  let order = all.length ? all.reduce((m, c) => Math.max(m, c.sort_order + 1), 0) : 0
+  for (const [code, name] of missing) {
+    await insertRow('categories', { name, code, sort_order: all.length ? order++ : DEFAULT_CATEGORIES.findIndex(([c]) => c === code) })
   }
+  return true
+}
+
+/** 第一次使用時建立預設動作 */
+async function seedIfEmpty() {
+  let changed = await ensureDefaultCategories()
 
   if (!(await db.meta.get('seeded'))) {
     if ((await db.exercises.count()) === 0) {

@@ -251,7 +251,7 @@ export async function applyImport(plan: ImportPlan, skipExisting: boolean) {
     for (const ne of plan.newExercises) {
       if (!used.has(ne.name) || idByName.has(ne.name)) continue
       if (ne.category && !catId.has(ne.category)) {
-        const c = await insertRow('categories', { name: ne.category, sort_order: catOrder++ })
+        const c = await insertRow('categories', { name: ne.category, code: null, sort_order: catOrder++ })
         catId.set(ne.category, c.id)
       }
       const e = await insertRow('exercises', {

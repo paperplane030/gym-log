@@ -23,7 +23,7 @@ npm run dev            # http://localhost:5173
 
 ## Supabase 設定
 
-1. 到 Supabase 後台 → **SQL Editor**，依序執行 `supabase/migrations/` 裡的每個 SQL 檔（`0001_init.sql` → `0002_categories.sql` → …），每個檔案都只需要執行一次。
+1. 到 Supabase 後台 → **SQL Editor**，依序執行 `supabase/migrations/` 裡的每個 SQL 檔（`0001_init.sql` → `0002_categories.sql` → `0003_default_categories.sql` → …），每個檔案都只需要執行一次。
 2. **Authentication → Sign In / Providers → Google**：啟用並填入 Google OAuth Client ID / Secret。
 3. **Authentication → URL Configuration**：
    - Site URL：正式網址（開發時可先填 `http://localhost:5173`）
@@ -55,7 +55,7 @@ supabase/migrations/  資料表、trigger、RLS 權限
 - [x] 資料表與 RLS
 - [x] Google 登入、離線優先同步
 - [x] 動作庫（新增／編輯／刪除）
-- [x] 自訂動作類別（新增／改名／排序／刪除）
+- [x] 自訂動作類別（新增／改名／排序／刪除；預設類別鎖定）
 - [x] 課表範本（含目標組數／次數／重量）
 - [x] 記錄訓練（顯示上次紀錄與目標作為參考）
 - [x] 歷史紀錄

@@ -1,6 +1,15 @@
 /** 第一次使用時建立的預設類別與動作，之後可以自由編輯或刪除 */
 
-export const DEFAULT_CATEGORIES = ['胸', '背', '腿', '肩', '手臂', '核心', '其他']
+/** [代碼, 名稱]。代碼用來辨識預設類別，不會顯示在畫面上 */
+export const DEFAULT_CATEGORIES: [code: string, name: string][] = [
+  ['chest', '胸'],
+  ['back', '背'],
+  ['legs', '腿'],
+  ['shoulders', '肩'],
+  ['arms', '手臂'],
+  ['core', '核心'],
+  ['other', '其他'],
+]
 
 export const DEFAULT_EXERCISES: [name: string, category: string][] = [
   ['槓鈴臥推', '胸'],

@@ -19,6 +19,8 @@ export interface BaseRow {
 export interface Category extends BaseRow {
   name: string
   sort_order: number
+  /** 預設類別的代碼（chest、back…），自訂類別是 null。預設類別不能改名、刪除 */
+  code: string | null
 }
 
 export interface Exercise extends BaseRow {

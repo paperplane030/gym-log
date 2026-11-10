@@ -33,6 +33,11 @@ db.version(2)
   })
   .upgrade((tx) => tx.table('meta').delete('cursor:exercises'))
 
+// v3：預設類別鎖定（categories 新增 code）。重新從雲端拉一次類別
+db.version(3)
+  .stores({})
+  .upgrade((tx) => tx.table('meta').delete('cursor:categories'))
+
 export const nowIso = () => new Date().toISOString()
 
 /** 本地日期 YYYY-MM-DD（不用 toISOString，避免時區跑掉一天） */

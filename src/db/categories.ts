@@ -21,10 +21,16 @@ export async function nextCategoryOrder() {
 }
 
 export async function createCategory(name: string) {
-  return insertRow('categories', { name, sort_order: await nextCategoryOrder() })
+  return insertRow('categories', { name, code: null, sort_order: await nextCategoryOrder() })
 }
 
-export const renameCategory = (id: string, name: string) => updateRow('categories', id, { name })
+/** 預設類別不能改名、刪除 */
+export const isDefaultCategory = (c: Category | undefined) => Boolean(c?.code)
+
+export async function renameCategory(id: string, name: string) {
+  if (isDefaultCategory(await db.categories.get(id))) return
+  await updateRow('categories', id, { name })
+}
 
 export async function reorderCategories(from: number, to: number) {
   const cats = await listCategories()
@@ -40,6 +46,7 @@ export async function reorderCategories(from: number, to: number) {
 
 /** 刪除類別：底下的動作改成未分類 */
 export async function removeCategory(id: string) {
+  if (isDefaultCategory(await db.categories.get(id))) return
   await db.transaction('rw', db.categories, db.exercises, async () => {
     const exs = await db.exercises.where('category_id').equals(id).toArray()
     for (const e of exs) await updateRow('exercises', e.id, { category_id: null })
