@@ -1,0 +1,38 @@
+{
+  "name": "gym-log",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc -b"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paperplane030/gym-log.git"
+  },
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/paperplane030/gym-log/issues"
+  },
+  "homepage": "https://github.com/paperplane030/gym-log#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "dexie": "^4.4.7",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.45",
+    "vue-router": "^5.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.7",
+    "vite-plugin-pwa": "^2.0.0",
+    "vue-tsc": "^3.3.14"
+  },
+  "private": true,
+  "type": "module"
+}
