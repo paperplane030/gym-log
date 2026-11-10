@@ -2,15 +2,22 @@
 
 自用健身紀錄 PWA。記錄每次訓練的動作、重量、次數；資料先存在手機，有網路時同步到 Supabase。
 
+## 文件
+
+- [功能說明](docs/FEATURES.md)：每個畫面怎麼用
+- [技術文件](docs/TECHNICAL.md)：使用的技術、樣式寫法、資料結構、同步機制
+
 ## 技術
 
-Vue 3 · TypeScript · Vite · Tailwind CSS v4 · Pinia · Vue Router · vite-plugin-pwa · Dexie.js（IndexedDB） · Supabase（PostgreSQL + Google 登入）
+Vue 3 · TypeScript · Vite · Tailwind CSS v4 · Pinia · Vue Router · vite-plugin-pwa · Dexie.js（IndexedDB） · Supabase（PostgreSQL + Google 登入） · SortableJS
+
+不使用 UI 元件庫，表單都是原生元素搭配 Tailwind，詳見[技術文件](docs/TECHNICAL.md#3-樣式與-ui)。
 
 ## 開始開發
 
 ```bash
 npm install
-cp .env.example .env   # 填入 Supabase Project URL 與 Publishable key
+cp .env.example .env   # 填入 Supabase Project URL 與 Publishable key（正式環境已寫在 .env.production）
 npm run dev            # http://localhost:5173
 ```
 
