@@ -1,6 +1,7 @@
 // 匯出／匯入：Excel 可直接貼上的表格格式
 import { db, alive, insertRow, today } from '@/db/local'
-import { CATEGORIES, categoryLabel, type Category, type Unit } from '@/db/types'
+import type { Unit } from '@/db/types'
+import { categoryName, listCategories, nextCategoryOrder } from '@/db/categories'
 import { num } from './format'
 
 export const HEADERS = ['日期', '動作', '部位', '組', '重量', '單位', '次數', '備註', '訓練備註'] as const
@@ -8,10 +9,11 @@ export const HEADERS = ['日期', '動作', '部位', '組', '重量', '單位',
 // ───────── 匯出 ─────────
 
 export async function exportTable(): Promise<string[][]> {
-  const [workouts, sets, exercises] = await Promise.all([
+  const [workouts, sets, exercises, categories] = await Promise.all([
     db.workouts.filter(alive).toArray(),
     db.workout_sets.filter(alive).toArray(),
     db.exercises.toArray(),
+    listCategories(),
   ])
   const ex = new Map(exercises.map((e) => [e.id, e]))
   const wk = new Map(workouts.map((w) => [w.id, w]))
@@ -34,7 +36,7 @@ export async function exportTable(): Promise<string[][]> {
       return [
         w.date,
         e?.name ?? '',
-        e ? categoryLabel(e.category) : '',
+        e ? categoryName(categories, e.category_id) : '',
         String(s.set_no),
         num(s.weight),
         s.unit,
@@ -106,7 +108,8 @@ export function parseTable(text: string): string[][] {
 export interface ImportSet {
   line: number
   exercise: string
-  category: Category
+  /** 類別名稱，空字串 = 未分類 */
+  category: string
   setNo: number | null
   weight: number | null
   unit: Unit
@@ -124,7 +127,8 @@ export interface ImportWorkout {
 
 export interface ImportPlan {
   workouts: ImportWorkout[]
-  newExercises: { name: string; category: Category }[]
+  newExercises: { name: string; category: string }[]
+  newCategories: string[]
   errors: { line: number; message: string }[]
 }
 
@@ -144,7 +148,6 @@ function parseNum(v: string, int: boolean) {
   return { ok: true, value: n }
 }
 
-const CAT_BY_LABEL = new Map<string, Category>(CATEGORIES.flatMap((c) => [[c.label, c.value], [c.value, c.value]]))
 
 /** 檢查資料並整理成匯入計畫（還不寫入） */
 export async function planImport(text: string): Promise<ImportPlan> {
@@ -162,7 +165,9 @@ export async function planImport(text: string): Promise<ImportPlan> {
 
   const exercises = await db.exercises.filter(alive).toArray()
   const known = new Set(exercises.map((e) => e.name))
-  const newEx = new Map<string, Category>()
+  const newEx = new Map<string, string>()
+  const knownCats = new Set((await listCategories()).map((c) => c.name))
+  const newCats = new Set<string>()
 
   const byDate = new Map<string, ImportWorkout>()
   for (let i = start; i < table.length; i++) {
@@ -190,9 +195,15 @@ export async function planImport(text: string): Promise<ImportPlan> {
     }
     const unitRaw = get(r, '單位').toLowerCase()
     const unit: Unit = unitRaw === 'lb' || unitRaw === 'lbs' || unitRaw === '磅' ? 'lb' : 'kg'
-    const category = CAT_BY_LABEL.get(get(r, '部位')) ?? 'other'
+    // 「未分類」或空白都視為沒有類別；不存在的類別會在匯入時建立
+    const rawCat = get(r, '部位')
+    const category = rawCat === '未分類' ? '' : rawCat
 
-    if (!known.has(name) && !newEx.has(name)) newEx.set(name, category)
+    // 已存在的動作維持原本的類別，只有新動作才用這一欄的類別
+    if (!known.has(name) && !newEx.has(name)) {
+      newEx.set(name, category)
+      if (category && !knownCats.has(category)) newCats.add(category)
+    }
 
     const wk = byDate.get(date) ?? { date, note: null, sets: [], exists: false }
     wk.note ||= get(r, '訓練備註') || null
@@ -216,6 +227,7 @@ export async function planImport(text: string): Promise<ImportPlan> {
   return {
     workouts,
     newExercises: [...newEx].map(([name, category]) => ({ name, category })),
+    newCategories: [...newCats],
     errors,
   }
 }
@@ -225,16 +237,29 @@ export async function applyImport(plan: ImportPlan, skipExisting: boolean) {
   const targets = plan.workouts.filter((w) => !(skipExisting && w.exists))
   let setCount = 0
 
-  await db.transaction('rw', [db.exercises, db.workouts, db.workout_sets], async () => {
+  await db.transaction('rw', [db.categories, db.exercises, db.workouts, db.workout_sets], async () => {
     const exercises = await db.exercises.filter(alive).toArray()
     const idByName = new Map(exercises.map((e) => [e.name, e.id]))
     let order = exercises.length
 
-    // 只建立實際會用到的新動作
+    const cats = await listCategories()
+    const catId = new Map(cats.map((c) => [c.name, c.id]))
+    let catOrder = await nextCategoryOrder()
+
+    // 只建立實際會用到的新動作（以及它們需要的新類別）
     const used = new Set(targets.flatMap((w) => w.sets.map((s) => s.exercise)))
     for (const ne of plan.newExercises) {
       if (!used.has(ne.name) || idByName.has(ne.name)) continue
-      const e = await insertRow('exercises', { name: ne.name, category: ne.category, note: null, sort_order: order++ })
+      if (ne.category && !catId.has(ne.category)) {
+        const c = await insertRow('categories', { name: ne.category, sort_order: catOrder++ })
+        catId.set(ne.category, c.id)
+      }
+      const e = await insertRow('exercises', {
+        name: ne.name,
+        category_id: ne.category ? catId.get(ne.category)! : null,
+        note: null,
+        sort_order: order++,
+      })
       idByName.set(ne.name, e.id)
     }
 

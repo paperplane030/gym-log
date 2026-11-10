@@ -2,7 +2,9 @@
 import { computed, ref } from 'vue'
 import BottomSheet from './BottomSheet.vue'
 import { db, alive, insertRow } from '@/db/local'
-import { CATEGORIES, type Category, type Exercise } from '@/db/types'
+import type { Exercise } from '@/db/types'
+import { categoryName, useCategories } from '@/db/categories'
+import CategoryChips from './CategoryChips.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
 
 const props = defineProps<{ selected?: string[] }>()
@@ -10,12 +12,16 @@ const emit = defineEmits<{ pick: [id: string]; close: [] }>()
 
 const exercises = useLiveQuery(() => db.exercises.filter(alive).sortBy('sort_order'), [] as Exercise[])
 const q = ref('')
-const cat = ref<Category | 'all'>('all')
+const categories = useCategories()
+const cat = ref('all')
+const validIds = computed(() => new Set(categories.value.map((c) => c.id)))
+const catOf = (e: Exercise) => (e.category_id && validIds.value.has(e.category_id) ? e.category_id : 'none')
+const hasNone = computed(() => exercises.value.some((e) => catOf(e) === 'none'))
 
 const list = computed(() => {
   const k = q.value.trim().toLowerCase()
   return exercises.value.filter(
-    (e) => (cat.value === 'all' || e.category === cat.value) && (!k || e.name.toLowerCase().includes(k)),
+    (e) => (cat.value === 'all' || catOf(e) === cat.value) && (!k || e.name.toLowerCase().includes(k)),
   )
 })
 const canCreate = computed(() => {
@@ -26,7 +32,7 @@ const canCreate = computed(() => {
 async function create() {
   const e = await insertRow('exercises', {
     name: q.value.trim(),
-    category: cat.value === 'all' ? 'other' : cat.value,
+    category_id: cat.value === 'all' || cat.value === 'none' ? null : cat.value,
     note: null,
     sort_order: exercises.value.length,
   })
@@ -38,21 +44,13 @@ async function create() {
   <BottomSheet title="選擇動作" @close="emit('close')">
     <div class="sticky top-0 space-y-2 bg-white pb-2 dark:bg-neutral-900">
       <input v-model="q" class="input" placeholder="搜尋或輸入新動作名稱" />
-      <div class="-mx-5 flex gap-2 overflow-x-auto px-5">
-        <button
-          v-for="c in [{ value: 'all', label: '全部' }, ...CATEGORIES]"
-          :key="c.value"
-          class="shrink-0 rounded-full px-3 py-1 text-sm"
-          :class="cat === c.value ? 'bg-emerald-500 text-white dark:text-neutral-950' : 'bg-neutral-100 dark:bg-neutral-800'"
-          @click="cat = c.value as Category | 'all'"
-        >
-          {{ c.label }}
-        </button>
+      <div class="-mx-1">
+        <CategoryChips v-model="cat" :categories="categories" :show-none="hasNone" />
       </div>
     </div>
 
     <button v-if="canCreate" class="btn-ghost mt-2 w-full" @click="create">
-      ＋ 新增「{{ q.trim() }}」{{ cat === 'all' ? '' : `（${CATEGORIES.find((c) => c.value === cat)?.label}）` }}
+      ＋ 新增「{{ q.trim() }}」{{ cat === 'all' ? '' : `（${categoryName(categories, cat)}）` }}
     </button>
 
     <ul class="mt-2 divide-y divide-neutral-200 dark:divide-neutral-800">

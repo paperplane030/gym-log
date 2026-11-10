@@ -94,6 +94,9 @@ async function confirmImport() {
           <p v-if="plan.newExercises.length" class="text-neutral-500">
             會新增 {{ plan.newExercises.length }} 個動作：{{ plan.newExercises.map((e) => e.name).join('、') }}
           </p>
+          <p v-if="plan.newCategories.length" class="text-neutral-500">
+            會新增 {{ plan.newCategories.length }} 個類別：{{ plan.newCategories.join('、') }}
+          </p>
           <ul class="mt-2 max-h-40 space-y-0.5 overflow-y-auto text-xs text-neutral-500">
             <li v-for="w in plan.workouts" :key="w.date" :class="w.exists && skipExisting && 'line-through opacity-50'">
               {{ formatDate(w.date, true) }} · {{ new Set(w.sets.map((s) => s.exercise)).size }} 個動作 · {{ w.sets.length }} 組

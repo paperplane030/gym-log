@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { BaseRow, Exercise, TableName, TableRows, Template, TemplateItem, Workout, WorkoutSet } from './types'
+import type { BaseRow, Category, Exercise, TableName, TableRows, Template, TemplateItem, Workout, WorkoutSet } from './types'
 
 interface Meta {
   key: string
@@ -7,6 +7,7 @@ interface Meta {
 }
 
 export const db = new Dexie('gym-log') as Dexie & {
+  categories: EntityTable<Category, 'id'>
   exercises: EntityTable<Exercise, 'id'>
   templates: EntityTable<Template, 'id'>
   template_items: EntityTable<TemplateItem, 'id'>
@@ -23,6 +24,14 @@ db.version(1).stores({
   workout_sets: 'id, _dirty, workout_id, exercise_id, [exercise_id+created_at]',
   meta: 'key',
 })
+
+// v2：新增自訂類別。動作改用 category_id，重新從雲端拉一次動作以取得對應
+db.version(2)
+  .stores({
+    categories: 'id, _dirty',
+    exercises: 'id, _dirty, category_id',
+  })
+  .upgrade((tx) => tx.table('meta').delete('cursor:exercises'))
 
 export const nowIso = () => new Date().toISOString()
 

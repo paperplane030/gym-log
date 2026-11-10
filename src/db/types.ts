@@ -1,18 +1,6 @@
 // 欄位命名和 Supabase 資料表一致（snake_case），同步時不用轉換
 
-export type Category = 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'other'
-
-export const CATEGORIES: { value: Category; label: string }[] = [
-  { value: 'chest', label: '胸' },
-  { value: 'back', label: '背' },
-  { value: 'legs', label: '腿' },
-  { value: 'shoulders', label: '肩' },
-  { value: 'arms', label: '手臂' },
-  { value: 'core', label: '核心' },
-  { value: 'other', label: '其他' },
-]
-
-export const categoryLabel = (c: Category) => CATEGORIES.find((x) => x.value === c)?.label ?? c
+export const UNCATEGORIZED = '未分類'
 
 export type Unit = 'kg' | 'lb'
 
@@ -28,9 +16,15 @@ export interface BaseRow {
   _dirty?: 0 | 1
 }
 
+export interface Category extends BaseRow {
+  name: string
+  sort_order: number
+}
+
 export interface Exercise extends BaseRow {
   name: string
-  category: Category
+  /** null = 未分類 */
+  category_id: string | null
   note: string | null
   sort_order: number
 }
@@ -69,6 +63,7 @@ export interface WorkoutSet extends BaseRow {
 }
 
 export interface TableRows {
+  categories: Category
   exercises: Exercise
   templates: Template
   template_items: TemplateItem
@@ -80,6 +75,7 @@ export type TableName = keyof TableRows
 
 /** 同步順序：被參照的表要先推上去，不然外鍵會失敗 */
 export const SYNC_TABLES: TableName[] = [
+  'categories',
   'exercises',
   'templates',
   'template_items',

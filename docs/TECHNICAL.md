@@ -55,6 +55,7 @@ gym-log/
    │  ├─ sync.ts           與 Supabase 的同步邏輯
    │  ├─ workouts.ts       訓練相關操作（加入動作、新增組、排序、上次紀錄）
    │  ├─ templates.ts      範本相關操作
+   │  ├─ categories.ts     類別相關操作、useCategories()
    │  └─ defaults.ts       第一次登入時建立的預設動作
    ├─ lib/
    │  ├─ supabase.ts       Supabase client
@@ -135,7 +136,9 @@ gym-log/
 |---|---|
 | `LazyInput.vue` | 輸入中不會被外部資料覆蓋的輸入框（見 3.5） |
 | `BottomSheet.vue` | 從下方滑出的面板，用 `<Teleport to="body">`，點背景關閉 |
-| `ExercisePicker.vue` | 選擇動作：搜尋、部位篩選、找不到時直接新增 |
+| `ExercisePicker.vue` | 選擇動作：搜尋、類別篩選、找不到時直接新增 |
+| `CategoryChips.vue` | 類別篩選按鈕列（全部／各類別／未分類） |
+| `CategoryManager.vue` | 管理類別：新增、改名、拖曳排序、刪除 |
 | `WorkoutEditor.vue` | 訓練編輯器（今日訓練、歷史紀錄共用） |
 | `ImportSheet.vue` | 匯入資料：貼上、選檔、預覽、確認 |
 | `BottomNav.vue` | 底部導覽列，子頁面也會標示所在分頁 |
@@ -178,7 +181,8 @@ gym-log/
 
 | 資料表 | 說明 | 主要欄位 |
 |---|---|---|
-| `exercises` | 動作 | `name`、`category`、`note`、`sort_order` |
+| `categories` | 動作類別（每人自訂） | `name`、`sort_order` |
+| `exercises` | 動作 | `name`、`category_id`（null = 未分類）、`note`、`sort_order` |
 | `templates` | 課表範本 | `name`、`note`、`sort_order` |
 | `template_items` | 範本中的動作 | `template_id`、`exercise_id`、`sort_order`、`target_sets`、`target_reps`、`target_weight` |
 | `workouts` | 一次訓練 | `date`（本地日期 YYYY-MM-DD）、`template_id`、`note` |
@@ -195,7 +199,9 @@ gym-log/
 | `server_updated_at` | 伺服器收到資料的時間，同步時用它當「上次拉到哪裡」的游標 |
 | `_dirty` | **只存在本機**：1 = 還沒上傳 |
 
-`category`（部位）的值：`chest` 胸、`back` 背、`legs` 腿、`shoulders` 肩、`arms` 手臂、`core` 核心、`other` 其他。
+**類別**：每個人有自己的類別清單，第一次使用時建立預設的 7 個（胸、背、腿、肩、手臂、核心、其他）。刪除類別時，底下動作的 `category_id` 會改成 null，顯示為「未分類」。
+
+> `exercises.category` 是舊版的固定部位欄位（`chest`、`back`…），`0002_categories.sql` 已經把資料搬到 `category_id`。這個欄位保留只是為了讓舊版 App 同步不會失敗，程式已經不再使用。
 
 `unit` 欄位目前固定是 `kg`，`lb` 是預留給之後支援磅用的。
 
@@ -244,10 +250,10 @@ gym-log/
 ```
 
 ### 5.1 流程（`src/db/sync.ts`）
-1. **推送**：依序處理 `exercises → templates → template_items → workouts → workout_sets`（被參照的表先推，外鍵才不會失敗）。把 `_dirty = 1` 的資料 upsert 上去，每批最多 1000 筆。
+1. **推送**：依序處理 `categories → exercises → templates → template_items → workouts → workout_sets`（被參照的表先推，外鍵才不會失敗）。把 `_dirty = 1` 的資料 upsert 上去，每批最多 1000 筆。
 2. **清除標記**：只清除「上傳後沒有再被修改」的資料的 `_dirty`，避免同步途中的修改被漏掉。
 3. **拉取**：每張表查詢 `server_updated_at > 上次游標` 的資料，寫回本機。如果本機有**更新的**未同步修改，保留本機版本。
-4. **初始化**：第一次使用（本機和雲端都沒有動作）時，建立 23 個預設動作。
+4. **初始化**：第一次使用時，建立 7 個預設類別和 23 個預設動作。類別只有在本機和雲端都完全沒有（包括已刪除的）時才會建立，所以刪光類別也不會被自動補回來。
 
 同一時間只會跑一個同步，重複呼叫會共用同一個 Promise。
 
@@ -322,7 +328,7 @@ gym-log/
 3. **檢查**：
    - 日期接受 `2026-11-10`、`2026/11/10`、`2026.11.10`，也會檢查日期是否存在
    - 重量要是數字、次數要是整數，兩個不能同時是空的
-   - 部位可以填中文或英文代碼，不認得的歸為「其他」
+   - 部位填類別名稱。只對**新動作**有作用：不存在的類別會自動建立，空白或「未分類」會變成未分類。已經存在的動作維持原本的類別
    - 單位填 `lb`、`lbs`、`磅` 會當成磅，其他一律當成 kg
    - 組號空白的話自動遞增
 4. **預覽**：顯示會匯入幾次訓練、幾組、會新增哪些動作，並列出有問題的資料列和原因。
@@ -365,6 +371,8 @@ gym-log/
 
 ### 開發注意事項
 - 新增資料表時，要同時修改：`supabase/migrations/` 的 SQL、`src/db/types.ts` 的型別和 `SYNC_TABLES`、`src/db/local.ts` 的 Dexie schema（要**升版本號** `db.version(n)`）。
+- 資料庫變更要新增一個編號更大的 SQL 檔（例如 `0003_xxx.sql`），不要修改已經執行過的檔案。部署時要**先執行 SQL，再更新前端**。
+- 本機資料庫目前是第 2 版：v2 新增 `categories`，並清除 `exercises` 的同步游標，讓動作重新從雲端拉一次，取得 `category_id`。
 - 查詢時記得用 `alive` 過濾掉已刪除的資料。
 - 寫入一律透過 `insertRow` / `updateRow` / `deleteRow`，不要直接呼叫 Dexie 的 `add` / `put`，不然不會被同步。
 - 會被資料更新影響的輸入框，請用 `LazyInput`，不要用 `:value` + `@change`。
