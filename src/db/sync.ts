@@ -16,7 +16,8 @@ async function push(table: TableName) {
 
   for (let i = 0; i < dirty.length; i += PAGE) {
     const batch = dirty.slice(i, i + PAGE)
-    const payload = batch.map(({ _dirty, server_updated_at, ...rest }) => rest)
+    // user_id 不送，由資料庫 trigger 設成目前登入者（本機的值可能是空的）
+    const payload = batch.map(({ _dirty, server_updated_at, user_id, ...rest }) => rest)
     const { error } = await supabase.from(table).upsert(payload)
     if (error) throw new Error(`${table} 上傳失敗：${error.message}`)
 
