@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { supabaseConfigured } from '@/lib/supabase'
+import { applyUpdateAndGo, hasPendingUpdate, isChunkLoadError, reloadTo } from '@/lib/pwa'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -17,11 +18,21 @@ export const router = createRouter({
   ],
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  // 有新版在等待 → 切換頁面時順便更新（第一次進入 App 時不處理）
+  if (from.matched.length && hasPendingUpdate()) {
+    applyUpdateAndGo(router.resolve(to).href)
+    return false
+  }
   if (!supabaseConfigured) return true // 還沒設定 Supabase 時先讓畫面能看
   const auth = useAuthStore()
   await auth.init()
   if (!to.meta.public && !auth.user) return { name: 'login' }
   if (to.name === 'login' && auth.user) return { name: 'today' }
   return true
+})
+
+// 頁面檔案載入失敗（例如新版部署後舊檔案已不存在）→ 重新整理到目標頁面
+router.onError((err, to) => {
+  if (isChunkLoadError(err)) reloadTo(to?.fullPath ?? location.href)
 })

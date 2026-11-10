@@ -9,7 +9,9 @@ export default defineConfig({
     vue(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 新版先等待，下次切換頁面時才接手（見 src/lib/pwa.ts）
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Gym Log',

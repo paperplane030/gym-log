@@ -58,7 +58,8 @@ gym-log/
    │  ├─ categories.ts     類別相關操作、useCategories()
    │  └─ defaults.ts       第一次登入時建立的預設動作
    ├─ lib/
-   │  ├─ supabase.ts       Supabase client
+   │  ├─ supabase.ts       Supabase client（含請求逾時）
+   │  ├─ pwa.ts            Service Worker 註冊與更新時機
    │  ├─ exchange.ts       匯出（TSV、CSV）與匯入（解析、檢查、寫入）
    │  └─ format.ts         日期、數字、組數的顯示格式
    ├─ stores/              Pinia
@@ -350,13 +351,29 @@ gym-log/
 ## 9. PWA
 
 設定在 `vite.config.ts` 的 `VitePWA()`：
-- `registerType: 'autoUpdate'`：有新版時在背景下載，下次開啟 App 時套用
+- `registerType: 'prompt'` + `injectRegister: false`：自己在 `src/lib/pwa.ts` 註冊 Service Worker，控制更新時機（見下方）
 - Workbox 預先快取所有打包出來的檔案，離線也能開啟
 - `navigateFallback: '/index.html'`：離線時任何路徑都能開啟
 - 圖示：`public/pwa-192.png`、`pwa-512.png`（也當 maskable 用）、`apple-touch-icon.png`（iOS 主畫面用）
 - `index.html` 有 `apple-mobile-web-app-*` 等 meta，讓 iOS 以全螢幕模式開啟
 
 > iOS 上從主畫面開啟的 App 和 Safari 的儲存空間是分開的，所以登入狀態、本機資料都不共用。
+
+### 更新時機（避免「點選單沒反應」）
+每個頁面都是分開打包、切換時才載入的檔案，檔名帶有 hash，每次部署都會改變。如果新版的 Service Worker **立刻接手**（`autoUpdate` 的做法），它會清掉舊版的快取，而開著的舊畫面切換頁面時，要載入的舊檔案已經不存在了。Cloudflare 找不到檔案時會回傳 `index.html`，於是頁面載入失敗，**點選單沒有反應**。
+
+目前的做法：
+1. 新版下載好後先**等待**（`registration.waiting`），不接手。舊畫面繼續由舊的 Service Worker 提供舊檔案，一切正常。
+2. App 從背景切回前景時，檢查有沒有新版（`registration.update()`）。
+3. 下次**切換頁面**時（`router.beforeEach`），如果有新版在等待，就通知它接手（`SKIP_WAITING`），再重新載入到要前往的頁面。
+4. 保險機制：萬一頁面檔案還是載入失敗（例如快取被系統清掉），`router.onError` 會重新整理到要前往的頁面，10 秒內最多一次，避免無限重新整理。
+
+> 不要在 `vite:preloadError` 事件裡呼叫 `preventDefault()`：這樣會吞掉真正的錯誤，路由收到的錯誤訊息變成 `Couldn't resolve component`。
+
+### 收訊差時不卡住
+- **啟動檢查登入**：token 過期時，`getSession()` 會連網更新 token，收訊差時可能卡很久。最多等 3 秒，超過就先用 `localStorage` 裡記住的登入狀態，之後 Supabase 更新完成會再透過 `onAuthStateChange` 通知。
+- **`onAuthStateChange` 的 callback 裡不直接呼叫其他 Supabase 函式**（用 `setTimeout` 延後），避免 supabase-js 內部互相等待造成卡死。
+- **Supabase 請求逾時**：所有請求 20 秒沒回應就當作失敗（`src/lib/supabase.ts` 的 `global.fetch`），同步狀態會顯示失敗，下次再試。
 
 ---
 

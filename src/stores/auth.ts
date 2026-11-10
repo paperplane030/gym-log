@@ -15,12 +15,29 @@ export const useAuthStore = defineStore('auth', () => {
   function init() {
     if (readyPromise) return readyPromise
     readyPromise = (async () => {
-      const { data } = await supabase.auth.getSession()
-      apply(data.session)
-      supabase.auth.onAuthStateChange((_event, s) => apply(s))
+      // callback 裡不能直接呼叫其他 Supabase 函式（會互相等待卡住），延到下一輪再處理
+      supabase.auth.onAuthStateChange((_event, s) => setTimeout(() => apply(s), 0))
+
+      // token 過期時 getSession 會連網更新；收訊差時可能卡很久，最多等 3 秒
+      const result = await Promise.race([
+        supabase.auth.getSession().then((r) => r.data.session),
+        new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 3000)),
+      ])
+      apply(result === 'timeout' ? readStoredSession() : result)
       ready.value = true
     })()
     return readyPromise
+  }
+
+  /** 直接讀手機裡記住的登入狀態（不連網） */
+  function readStoredSession(): Session | null {
+    try {
+      const key = Object.keys(localStorage).find((k) => /^sb-.+-auth-token$/.test(k))
+      const data = key ? JSON.parse(localStorage.getItem(key) ?? 'null') : null
+      return data?.user ? (data as Session) : null
+    } catch {
+      return null
+    }
   }
 
   function apply(s: Session | null) {
