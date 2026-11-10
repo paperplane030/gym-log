@@ -9,6 +9,7 @@ export const router = createRouter({
     { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { title: '歷史紀錄' } },
     { path: '/exercises', name: 'exercises', component: () => import('@/views/ExercisesView.vue'), meta: { title: '動作庫' } },
     { path: '/templates', name: 'templates', component: () => import('@/views/TemplatesView.vue'), meta: { title: '課表範本' } },
+    { path: '/workouts/:id', name: 'workout', component: () => import('@/views/WorkoutView.vue'), meta: { title: '訓練紀錄' } },
     { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '設定' } },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
