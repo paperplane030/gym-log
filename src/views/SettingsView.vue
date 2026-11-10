@@ -2,6 +2,9 @@
 import { useAuthStore } from '@/stores/auth'
 import { useSyncStore } from '@/stores/sync'
 import { useTheme, type ThemePref } from '@/composables/useTheme'
+import { ref } from 'vue'
+import { downloadCSV, exportTable, toTSV } from '@/lib/exchange'
+import ImportSheet from '@/components/ImportSheet.vue'
 
 const auth = useAuthStore()
 const sync = useSyncStore()
@@ -12,6 +15,25 @@ const themes: { value: ThemePref; label: string }[] = [
   { value: 'light', label: '淺色' },
   { value: 'dark', label: '深色' },
 ]
+
+const importing = ref(false)
+const msg = ref('')
+
+async function copyTSV() {
+  const rows = await exportTable()
+  try {
+    await navigator.clipboard.writeText(toTSV(rows))
+    msg.value = `已複製 ${rows.length - 1} 組，可直接貼到 Excel`
+  } catch {
+    msg.value = '複製失敗，請改用下載 CSV'
+  }
+}
+
+async function download() {
+  const rows = await exportTable()
+  downloadCSV(rows)
+  msg.value = `已下載 ${rows.length - 1} 組`
+}
 
 async function logout() {
   if (!confirm('確定登出？本機資料會在同步後清除。')) return
@@ -50,7 +72,13 @@ async function logout() {
 
     <section class="card space-y-2">
       <h2 class="font-medium">資料</h2>
-      <p class="text-sm text-neutral-500">匯出／匯入（Excel 格式）— 待實作</p>
+      <p class="text-sm text-neutral-500">匯出所有訓練紀錄，每一組一列。</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button class="btn-ghost text-sm" @click="copyTSV">複製（貼到 Excel）</button>
+        <button class="btn-ghost text-sm" @click="download">下載 CSV</button>
+      </div>
+      <button class="btn-ghost w-full text-sm" @click="importing = true">匯入紀錄</button>
+      <p v-if="msg" class="text-sm text-emerald-600 dark:text-emerald-400">{{ msg }}</p>
     </section>
 
     <section v-if="auth.user" class="card space-y-2">
@@ -58,5 +86,6 @@ async function logout() {
       <p class="text-sm text-neutral-500">{{ auth.user.email }}</p>
       <button class="btn-ghost w-full text-red-500" @click="logout">登出</button>
     </section>
+    <ImportSheet v-if="importing" @close="importing = false" />
   </div>
 </template>

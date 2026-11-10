@@ -10,11 +10,14 @@ import {
   removeExercise,
   removeSet,
   removeWorkout,
+  reorderSets,
   type PreviousRecord,
 } from '@/db/workouts'
 import { useLiveQuery } from '@/composables/useLiveQuery'
 import { formatDate, num, setText } from '@/lib/format'
 import ExercisePicker from './ExercisePicker.vue'
+import LazyInput from './LazyInput.vue'
+import { vSortable } from '@/directives/sortable'
 
 const props = defineProps<{ workoutId: string }>()
 const emit = defineEmits<{ deleted: [] }>()
@@ -62,24 +65,8 @@ const picking = ref(false)
 const noteOpen = ref(new Set<string>())
 const menuFor = ref<string | null>(null)
 
-function parseNum(v: string, int = false) {
-  const t = v.trim().replace(',', '.')
-  if (!t) return null
-  const n = int ? parseInt(t, 10) : parseFloat(t)
-  return Number.isFinite(n) && n >= 0 ? n : null
-}
-
-function setWeight(s: WorkoutSet, e: Event) {
-  const v = parseNum((e.target as HTMLInputElement).value)
-  if (v !== s.weight) void updateRow('workout_sets', s.id, { weight: v })
-}
-function setReps(s: WorkoutSet, e: Event) {
-  const v = parseNum((e.target as HTMLInputElement).value, true)
-  if (v !== s.reps) void updateRow('workout_sets', s.id, { reps: v })
-}
-function setNote(s: WorkoutSet, e: Event) {
-  const v = (e.target as HTMLInputElement).value.trim() || null
-  if (v !== s.note) void updateRow('workout_sets', s.id, { note: v })
+function saveSet(s: WorkoutSet, field: 'weight' | 'reps' | 'note', v: number | string | null) {
+  void updateRow('workout_sets', s.id, { [field]: v })
 }
 function applyPrev(s: WorkoutSet, p: WorkoutSet) {
   void updateRow('workout_sets', s.id, { weight: p.weight, reps: p.reps })
@@ -91,10 +78,12 @@ function toggleNote(sid: string) {
   noteOpen.value = n
 }
 
-function updateWorkout(field: 'date' | 'note', e: Event) {
+function updateDate(e: Event) {
   const raw = (e.target as HTMLInputElement).value
-  if (field === 'date' && raw) void updateRow('workouts', id, { date: raw })
-  if (field === 'note') void updateRow('workouts', id, { note: raw.trim() || null })
+  if (raw) void updateRow('workouts', id, { date: raw })
+}
+function updateNote(v: number | string | null) {
+  void updateRow('workouts', id, { note: (v as string | null) ?? null })
 }
 
 async function pick(exId: string) {
@@ -118,7 +107,9 @@ async function onDeleteWorkout() {
 function targetText(t: TemplateItem | undefined) {
   if (!t) return ''
   const parts = []
-  if (t.target_sets || t.target_reps) parts.push(`${t.target_sets ?? '?'} 組 × ${t.target_reps ?? '?'} 下`)
+  if (t.target_sets && t.target_reps) parts.push(`${t.target_sets} 組 × ${t.target_reps} 下`)
+  else if (t.target_sets) parts.push(`${t.target_sets} 組`)
+  else if (t.target_reps) parts.push(`每組 ${t.target_reps} 下`)
   if (t.target_weight != null) parts.push(`${num(t.target_weight)}kg`)
   return parts.join(' · ')
 }
@@ -133,18 +124,13 @@ function targetText(t: TemplateItem | undefined) {
           type="date"
           class="input w-auto"
           :value="workout.date"
-          @change="updateWorkout('date', $event)"
+          @change="updateDate"
         />
         <span v-if="template" class="truncate rounded-full bg-emerald-100 px-2.5 py-1 text-xs text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
           {{ template.name }}
         </span>
       </div>
-      <input
-        class="input"
-        placeholder="這次訓練的備註（選填）"
-        :value="workout.note ?? ''"
-        @change="updateWorkout('note', $event)"
-      />
+      <LazyInput class="input" placeholder="這次訓練的備註（選填）" :value="workout.note" @commit="updateNote" />
     </section>
 
     <!-- 動作 -->
@@ -173,28 +159,19 @@ function targetText(t: TemplateItem | undefined) {
         </div>
       </header>
 
-      <div class="grid grid-cols-[1.5rem_1fr_1fr_auto] items-center gap-x-2 text-xs text-neutral-500">
-        <span>組</span><span>重量 (kg)</span><span>次數</span><span class="w-16" />
+      <div class="grid grid-cols-[1.25rem_1.25rem_1fr_1fr_auto] items-center gap-x-2 text-xs text-neutral-500">
+        <span /><span>組</span><span>重量 (kg)</span><span>次數</span><span class="w-16" />
       </div>
 
-      <div v-for="s in g.sets" :key="s.id" class="space-y-1">
-        <div class="grid grid-cols-[1.5rem_1fr_1fr_auto] items-center gap-x-2">
+      <div v-sortable="(from: number, to: number) => reorderSets(id, g.exerciseId, from, to)" class="space-y-3">
+      <div v-for="s in g.sets" :key="s.id" class="sortable-item space-y-1 rounded-xl bg-white dark:bg-neutral-900">
+        <div class="grid grid-cols-[1.25rem_1.25rem_1fr_1fr_auto] items-center gap-x-2">
+          <span class="drag-handle flex h-10 cursor-grab touch-none select-none items-center justify-center text-neutral-400" title="拖曳排序">
+            <svg viewBox="0 0 10 16" class="h-4 w-2.5" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>
+          </span>
           <span class="text-center text-sm font-medium text-neutral-500">{{ s.set_no }}</span>
-          <input
-            class="input py-2 text-center"
-            inputmode="decimal"
-            :value="num(s.weight)"
-            @change="setWeight(s, $event)"
-            @focus="($event.target as HTMLInputElement).select()"
-          />
-          <input
-            class="input py-2 text-center"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            :value="num(s.reps)"
-            @change="setReps(s, $event)"
-            @focus="($event.target as HTMLInputElement).select()"
-          />
+          <LazyInput class="input py-2 text-center" kind="decimal" :value="s.weight" @commit="saveSet(s, 'weight', $event)" />
+          <LazyInput class="input py-2 text-center" kind="int" :value="s.reps" @commit="saveSet(s, 'reps', $event)" />
           <div class="flex w-16 justify-end gap-1">
             <button
               class="h-9 w-7 rounded-lg text-sm"
@@ -209,19 +186,20 @@ function targetText(t: TemplateItem | undefined) {
         <!-- 上次同組的紀錄：只當參考，點一下才套用 -->
         <button
           v-if="previous.get(g.exerciseId)?.sets[s.set_no - 1]"
-          class="ml-8 text-xs text-neutral-500 underline decoration-dotted underline-offset-2"
+          class="ml-14 text-xs text-neutral-500 underline decoration-dotted underline-offset-2"
           @click="applyPrev(s, previous.get(g.exerciseId)!.sets[s.set_no - 1]!)"
         >
           上次 {{ setText(previous.get(g.exerciseId)!.sets[s.set_no - 1]!.weight, previous.get(g.exerciseId)!.sets[s.set_no - 1]!.reps) }} · 套用
         </button>
 
-        <input
+        <LazyInput
           v-if="s.note || noteOpen.has(s.id)"
-          class="input ml-8 w-[calc(100%-2rem)] py-2 text-sm"
+          class="input ml-14 w-[calc(100%-3.5rem)] py-2 text-sm"
           placeholder="這組的備註"
-          :value="s.note ?? ''"
-          @change="setNote(s, $event)"
+          :value="s.note"
+          @commit="saveSet(s, 'note', $event)"
         />
+      </div>
       </div>
 
       <button class="btn-ghost w-full py-2 text-sm" @click="addSet(id, g.exerciseId)">＋ 新增一組</button>

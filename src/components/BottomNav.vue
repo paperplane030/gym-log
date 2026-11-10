@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+const active = (to: string) =>
+  to === '/' ? route.path === '/' : route.path.startsWith(to) || (to === '/history' && route.path.startsWith('/workouts'))
+
 const items = [
   { to: '/', label: '訓練', icon: 'M6.5 6.5v11M17.5 6.5v11M3 9v6M21 9v6M6.5 12h11' },
   { to: '/history', label: '紀錄', icon: 'M12 7v5l3 3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' },
@@ -16,8 +22,8 @@ const items = [
       <li v-for="item in items" :key="item.to" class="flex-1">
         <RouterLink
           :to="item.to"
-          class="flex flex-col items-center gap-1 py-2 text-xs text-neutral-500 dark:text-neutral-400"
-          exact-active-class="!text-emerald-600 dark:!text-emerald-400"
+          class="flex flex-col items-center gap-1 py-2 text-xs"
+          :class="active(item.to) ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-500 dark:text-neutral-400'"
         >
           <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path :d="item.icon" />

@@ -129,3 +129,19 @@ export async function previousRecords(workoutId: string, exerciseIds: string[], 
   }
   return result
 }
+
+/** 拖曳排序：把某動作的第 from 組移到 to，重新編組號 */
+export async function reorderSets(workoutId: string, exerciseId: string, from: number, to: number) {
+  const sets = (await setsOf(workoutId))
+    .filter((s) => s.exercise_id === exerciseId)
+    .sort((a, b) => a.set_no - b.set_no)
+  const [moved] = sets.splice(from, 1)
+  if (!moved) return
+  sets.splice(to, 0, moved)
+  // 一次寫入，畫面不會看到中間狀態
+  await db.transaction('rw', db.workout_sets, async () => {
+    for (const [i, s] of sets.entries()) {
+      if (s.set_no !== i + 1) await updateRow('workout_sets', s.id, { set_no: i + 1 })
+    }
+  })
+}
